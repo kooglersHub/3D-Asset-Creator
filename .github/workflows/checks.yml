@@ -20,6 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y blender
-      - run: blender --background --python-exit-code 1 --python tests/blender_equipment_smoke.py
+      - run: curl --fail --location --retry 3 --output /tmp/blender.tar.xz https://download.blender.org/release/Blender4.2/blender-4.2.23-linux-x64.tar.xz
+      - run: tar -xf /tmp/blender.tar.xz -C /tmp
+      - run: /tmp/blender-4.2.23-linux-x64/blender --background --python-exit-code 1 --python tests/blender_equipment_smoke.py
