@@ -1,4 +1,5 @@
 """Offline source validation: no Modal account, GPU, or weight downloads required."""
+
 from __future__ import annotations
 
 import ast
@@ -25,8 +26,11 @@ class TestStandaloneModalAssetFurnace(unittest.TestCase):
     def test_modal_has_explicit_setup_step(self):
         source = (ROOT / "tools/modal_assetfurnace.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
-        names = {node.name for node in ast.walk(tree)
-                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        names = {
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
         self.assertIn("setup_assetfurnace", names)
         self.assertIn("generate_character", names)
         self.assertIn("main", names)
