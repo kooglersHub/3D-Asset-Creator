@@ -102,6 +102,18 @@ def smoke():
         bpy.ops.import_scene.gltf(filepath=str(repaired))
         rigs = [obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"]
         assert rigs and rigs[0].animation_data and rigs[0].animation_data.action
+        attached = [
+            obj
+            for obj in bpy.context.scene.objects
+            if obj.type == "MESH" and any(mod.type == "ARMATURE" for mod in obj.modifiers)
+        ]
+        assert len(attached) == 1, "Rigid equipment skin was lost in GLB export"
+        bpy.context.scene.frame_set(1)
+        first = evaluated_points(attached[0])
+        bpy.context.scene.frame_set(10)
+        last = evaluated_points(attached[0])
+        assert (first[0] - last[0]).length > 0.1
+        assert abs((first[1] - first[0]).length - (last[1] - last[0]).length) < 1e-5
         assert source.read_bytes() == original_bytes
         print(
             "PASS: rigid equipment follows the hand without stretching; animation and source preserved"

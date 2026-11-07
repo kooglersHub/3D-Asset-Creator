@@ -21,6 +21,12 @@ def rigid_weights(obj, indices, bone, armature):
     if modifier is None:
         modifier = obj.modifiers.new("Rigid attachment", "ARMATURE")
     modifier.object = armature
+    # glTF expects skinned meshes under the armature. Bake any prop-placement
+    # parent into its transform first, keeping the rest-space placement unchanged.
+    bpy.context.view_layer.update()
+    transform = obj.matrix_world.copy()
+    obj.parent = armature
+    obj.matrix_world = transform
 
 
 def bind_parts(source, config):
