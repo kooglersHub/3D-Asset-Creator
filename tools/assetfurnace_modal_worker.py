@@ -8,17 +8,44 @@ copy/pasting internal generation and rigging code.
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 import time
 import zipfile
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 
 WORKSPACE = Path("/af")
 ASSETFURNACE = WORKSPACE / "home" / "image-to-3dlab"
 EXPORTS = WORKSPACE / "exports"
+STUDIO_URL = "http://127.0.0.1:8777"
+
+
+def start_studio() -> None:
+    # A cold Modal Volume can take longer than the Studio client's default wait.
+    # Inherit stdout/stderr so a failed server startup is visible in Modal's logs.
+    process = subprocess.Popen(
+        [sys.executable, str(ASSETFURNACE / "viewer/serve.py"), "--no-browser"],
+        cwd=ASSETFURNACE,
+        stdin=subprocess.DEVNULL,
+    )
+    atexit.register(process.terminate)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"AssetFurnace Studio exited during startup ({process.returncode})")
+        try:
+            with urlopen(f"{STUDIO_URL}/api/catalog", timeout=15) as response:
+                if response.status == 200:
+                    return
+        except (URLError, TimeoutError):
+            time.sleep(1)
+    raise RuntimeError("AssetFurnace Studio did not answer within two minutes.")
 
 
 def parse() -> argparse.Namespace:
@@ -81,7 +108,7 @@ def main() -> None:
     sys.path.insert(0, str(ASSETFURNACE))
     from image_to_3dlab.mcp_server import Studio, create, continue_asset, list_moves, run_status
 
-    studio = Studio()
+    studio = Studio(base=STUDIO_URL, start=start_studio)
     available = list_moves(studio)
     if not available.get("installed"):
         raise RuntimeError("SkinTokens rig/animate not installed. Run Modal setup first.")
