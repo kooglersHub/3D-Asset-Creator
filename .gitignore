@@ -4,3 +4,5 @@ exports/
 *.zip
 *.log
 .env
+.tools/
+.ruff_cache/
