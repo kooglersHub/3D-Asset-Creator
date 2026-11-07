@@ -38,6 +38,8 @@ image = (
         "XDG_CACHE_HOME": "/af/cache",
         "HF_HOME": "/af/huggingface",
         "ASSETFURNACE_MODELS": "/af/models",
+        # Setup writes here; Studio otherwise looks under ASSETFURNACE_MODELS/u2net.
+        "U2NET_HOME": "/af/home/.u2net",
         # uv creates locks and hard links the Modal Volume cannot provide.
         "UV_CACHE_DIR": "/tmp/assetfurnace-uv-cache",
         "UV_LINK_MODE": "copy",
@@ -56,6 +58,7 @@ volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 def worker_env() -> dict[str, str]:
     env = os.environ.copy()
     env["PATH"] = "/af/home/.local/bin:" + env.get("PATH", "")
+    env["I3D_NO_USAGE"] = "1"
     for directory in ("home", "cache", "huggingface", "models",
                       "inputs", "exports"):
         (Path("/af") / directory).mkdir(parents=True, exist_ok=True)
