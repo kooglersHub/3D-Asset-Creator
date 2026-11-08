@@ -24,7 +24,7 @@ image = (
         "timm==1.0.22",
         "einops==0.8.1",
         "safetensors==0.6.2",
-        "git+https://github.com/huggingface/diffusers.git@84532a058702c74ae5d1dd6ceb05683fc5d5e768",
+        "diffusers==0.37.0",
     )
     .env({"HF_HOME": "/weights/huggingface", "HF_HUB_DISABLE_TELEMETRY": "1"})
     .add_local_dir(str(ROOT / "asset_pipeline"), remote_path="/root/asset_pipeline")
@@ -52,6 +52,14 @@ def setup(editor: str = "qwen-edit"):
 
 def mask_background(picture):
     global _masker
+    if "A" in picture.getbands():
+        alpha_min, alpha_max = picture.getchannel("A").getextrema()
+        if alpha_max == 0:
+            raise ValueError("Source image is fully transparent")
+        if alpha_min < 250:
+            # Preserve an existing artist-provided cutout, including dark armor
+            # and thin fingers that a second segmentation pass could erase.
+            return picture.convert("RGBA")
     import torch
     from torchvision import transforms
     from transformers import AutoModelForImageSegmentation
@@ -104,7 +112,10 @@ def edit(pictures, prompt, editor, seed):
         pipeline = pipeline_class.from_pretrained(
             str(directory), torch_dtype=torch.bfloat16, local_files_only=True
         )
-        pipeline.enable_model_cpu_offload()
+        if torch.cuda.get_device_properties(0).total_memory >= 96 * 1024**3:
+            pipeline.to("cuda")
+        else:
+            pipeline.enable_model_cpu_offload()
         _editors[editor] = pipeline
     parameters = {
         "image": pictures,

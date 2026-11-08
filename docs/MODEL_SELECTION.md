@@ -2,6 +2,13 @@
 
 These are selected candidates, not a measured universal ranking. Quality for
 this exact armored knight needs a same-input comparison and human review.
+
+Rechecked 2026-11-09: [Qwen Image 2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
+is newer and supports native RGBA, but its
+[Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)
+limits use to non-commercial research/evaluation unless separately licensed.
+It is therefore not selected for this commercially usable game-asset workflow.
+The Apache-2.0 Image Edit 2511 path remains the reference-editing choice.
 The existing Hi3D result is documented in [HI3D_VALIDATION.md](HI3D_VALIDATION.md).
 
 | Task | Choice | Why and limit |
