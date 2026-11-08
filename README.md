@@ -180,6 +180,10 @@ blender --background --python-exit-code 1 --python tools/preview_asset.py -- --e
 blender --background --python-exit-code 1 --python tools/check_blender_imports.py -- exports/Knight-hi3d
 ```
 
+For a geometry comparison without the coarse model's textures, add
+`--material-mode clay` to the preview command. Both meshes then use the same
+neutral material; this helps distinguish actual shape detail from painted shading.
+
 Important differences:
 - Geometry only: no UV textures, materials, colors, rig or animation are generated.
   Transfer or create textures in Blender, then import the textured result through
