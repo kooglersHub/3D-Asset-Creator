@@ -171,6 +171,40 @@ class PipelineStageTests(unittest.TestCase):
         self.api.continue_asset.assert_not_called()
         self.api.list_moves.assert_not_called()
 
+    def test_reviewed_external_glb_skips_finish_and_keeps_pbr_surface(self):
+        self.args.asset_id = None
+        self.args.input = self.output / "raw.glb"
+        self.record.pop("finished")
+        reviews = {"model": accepted("model", {"model": sha256(self.args.input)})}
+
+        def continue_clip(*_args, **kwargs):
+            self.record["clips"].append({"name": kwargs["move"], "file": "idle.glb"})
+            return {"run_id": "continued"}
+
+        self.api.continue_asset.side_effect = continue_clip
+        worker.run_pipeline(
+            self.studio, self.api, self.args, options("motion-test", reviews=reviews), self.folder
+        )
+        created = self.api.create.call_args.kwargs
+        self.assertFalse(created["finish_upload"])
+        self.assertEqual(created["stop_after_step"], "rigged")
+        self.assertEqual(created["advanced"]["rig_from"], "model")
+        self.assertTrue(self.api.continue_asset.call_args.kwargs["again"])
+        self.assertEqual(sha256(self.args.input), sha256(self.folder / "model.glb"))
+
+    def test_stale_external_surface_is_rejected_before_cloud_creation(self):
+        self.args.asset_id = None
+        self.args.input = self.output / "raw.glb"
+        with self.assertRaisesRegex(ValueError, "stale"):
+            worker.run_pipeline(
+                self.studio,
+                self.api,
+                self.args,
+                options("motion-test", reviews={"model": accepted("model", {"model": "old"})}),
+                self.folder,
+            )
+        self.api.create.assert_not_called()
+
     def test_motion_review_required_before_expanding(self):
         reviews = {
             "model": accepted("model", {"model": sha256(self.output / "finished.glb")}, "selected")

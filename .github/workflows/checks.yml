@@ -17,6 +17,9 @@ jobs:
       - run: python -m compileall -q tools
       - run: modal run tools/modal_assetfurnace.py --help
       - run: modal run tools/modal_hi3d.py --help
+      - run: modal run tools/modal_references.py --help
+      - run: modal run tools/modal_trellis2.py --help
+      - run: python tools/batch.py --help
   blender:
     runs-on: ubuntu-latest
     steps:
@@ -24,3 +27,9 @@ jobs:
       - run: curl --fail --location --retry 3 --output /tmp/blender.tar.xz https://download.blender.org/release/Blender4.2/blender-4.2.23-linux-x64.tar.xz
       - run: tar -xf /tmp/blender.tar.xz -C /tmp
       - run: /tmp/blender-4.2.23-linux-x64/blender --background --python-exit-code 1 --python tests/blender_equipment_smoke.py
+      - run: /tmp/blender-4.2.23-linux-x64/blender --background --python-exit-code 1 --python tests/blender_finish_smoke.py
+      - run: /tmp/blender-4.2.23-linux-x64/blender --background --python-exit-code 1 --python tests/blender_package_smoke.py
+      - run: curl --fail --location --retry 3 --output /tmp/godot.zip https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_linux.x86_64.zip
+      - run: unzip /tmp/godot.zip -d /tmp/godot && chmod +x /tmp/godot/Godot_v4.6.1-stable_linux.x86_64
+      - run: /tmp/godot/Godot_v4.6.1-stable_linux.x86_64 --headless --path exports/godot-smoke --editor --import
+      - run: timeout 60 /tmp/godot/Godot_v4.6.1-stable_linux.x86_64 --headless --path exports/godot-smoke --script res://test.gd
