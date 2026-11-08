@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "defaults": {
+    "editor": "qwen-edit",
+    "resolution": 512,
+    "refine": false,
+    "triangles": 40000,
+    "texture_size": 2048,
+    "moves": ["idle", "walk", "run", "sword_swing", "hit_react", "death"]
+  },
+  "jobs": [
+    {
+      "id": "DarkKnight",
+      "image": "../references/dark_knight_front_transparent.png",
+      "weapon": {
+        "hand_bone": "auto",
+        "length": 1.2,
+        "position": [0, 0, 0],
+        "rotation_degrees": [0, 0, 0],
+        "scale": 1.0
+      }
+    },
+    {
+      "id": "Gargoyle",
+      "image": "../references/gargoyle.png",
+      "kind": "prop"
+    }
+  ]
+}

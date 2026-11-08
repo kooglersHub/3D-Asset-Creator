@@ -1,5 +1,12 @@
 # 3D Asset Creator
 
+New: [resumable batch production](docs/BATCH.md) with Qwen/FLUX reference editing,
+BiRefNet masking, TRELLIS.2 PBR models, optional Hi3D, local Blender baking,
+rig/motion review gates and Godot packages with separate weapons.
+[Model comparison and sources](docs/MODEL_SELECTION.md).
+The new cloud adapters still require a GPU validation run; local export/runtime
+tests use synthetic fixtures. The commands below remain the standalone legacy path.
+
 Image or GLB → reviewed static character → one motion test → animation set.
 Runs AssetFurnace 0.5.7, Pixal3D, Blender and SkinTokens on Modal.
 The default **stops before rigging**. A successful import is not a visual quality pass.

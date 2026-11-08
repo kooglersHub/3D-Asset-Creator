@@ -74,6 +74,9 @@ image = image.add_local_file(
     str(Path(__file__).with_name("quality_workflow.py")),
     remote_path="/root/quality_workflow.py",
 )
+image = image.add_local_file(
+    str(Path(__file__).with_name("rig_semantics.py")), remote_path="/root/rig_semantics.py"
+)
 
 app = modal.App(APP_NAME)
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
@@ -103,6 +106,8 @@ def execute(*command: str, env: dict[str, str]) -> None:
     cpu=8,
     memory=32768,
     max_containers=1,
+    scaledown_window=10,
+    retries=0,
 )
 def setup_assetfurnace(multiview: bool = False) -> str:
     """Explicit one-time download/install; partial progress survives failures."""
@@ -139,6 +144,8 @@ def setup_assetfurnace(multiview: bool = False) -> str:
     cpu=8,
     memory=32768,
     max_containers=1,
+    scaledown_window=10,
+    retries=0,
 )
 def generate_character(
     character: str,
@@ -258,7 +265,11 @@ def main(
             raise FileNotFoundError(source)
         name, data = source.name, source.read_bytes()
 
-    if stage in {"motion-test", "animate"} and not asset_id:
+    if (
+        stage in {"motion-test", "animate"}
+        and not asset_id
+        and not (stage == "motion-test" and model_path)
+    ):
         raise ValueError("Animation requires a reviewed --asset-id, not a new source")
     options = {
         "stage": stage,
@@ -289,7 +300,8 @@ def main(
         check_review(options["reviews"].get("reference", {}), "reference", hashes)
     if stage in {"motion-test", "animate"}:
         review = options["reviews"].get("model", {})
-        check_review(review, "model", review.get("hashes", {}), asset_id)
+        hashes = {"model": sha256(source)} if model_path else review.get("hashes", {})
+        check_review(review, "model", hashes, asset_id or None)
         if stage == "animate":
             review = options["reviews"].get("motion", {})
             check_review(review, "motion", review.get("hashes", {}), asset_id)

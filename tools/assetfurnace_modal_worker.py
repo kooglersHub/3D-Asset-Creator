@@ -182,8 +182,28 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
             save_glb(record["finished"], folder / filename)
             variants[detail] = {"file": filename, "asset_id": variant_id}
     else:
+        if args.input:
+            if stage != "motion-test" or args.input.suffix.lower() != ".glb":
+                raise ValueError("Only motion-test can import a reviewed finished GLB")
+            review = options["reviews"].get("model", {})
+            check_review(review, "model", {"model": sha256(args.input)})
+            advanced["rig_from"] = "model"
+            job = api.create(
+                studio,
+                want="character",
+                description=args.character,
+                model_path=str(args.input.resolve()),
+                finish_upload=False,
+                stop_after_step="rigged",
+                advanced=advanced,
+            )
+            identifier = completed_id(studio, job, api)
+            options["reviews"]["model"] = {**review, "asset_id": identifier}
         record = asset_by_id(studio, identifier)
-        hashes = {"model": record_hash(record, "finished")}
+        surface_field = "finished" if record.get("finished") else "model"
+        if surface_field == "model":
+            advanced["rig_from"] = "model"
+        hashes = {"model": record_hash(record, surface_field)}
         check_review(options["reviews"].get("model", {}), "model", hashes, identifier)
         if stage == "animate":
             motion_review = options["reviews"].get("motion", {})
@@ -208,14 +228,29 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
             if any(clip["name"] == move for clip in record.get("clips", [])):
                 continue
             job = api.continue_asset(
-                studio, asset_id=identifier, up_to="animated", move=move, advanced=advanced
+                studio,
+                asset_id=identifier,
+                up_to="animated",
+                again=bool(record.get("rigged")),
+                move=move,
+                advanced=advanced,
             )
             identifier = completed_id(studio, job, api)
         record = asset_by_id(studio, identifier)
-        if record_hash(record, "finished") != hashes["model"]:
+        if record_hash(record, surface_field) != hashes["model"]:
             raise ValueError("Animation changed the reviewed model unexpectedly")
-        save_glb(record["finished"], folder / "model.glb")
+        save_glb(record[surface_field], folder / "model.glb")
         save_glb(record["rigged"], folder / "rigged.glb")
+        from rig_semantics import map_glb
+
+        try:
+            semantics = map_glb(folder / "rigged.glb", ASSETFURNACE / "scripts/kimodo_retarget.py")
+        except (ValueError, KeyError, ImportError, OSError) as error:
+            # Keep a valid rig usable with explicit bone selection if the mapper
+            # cannot label this topology; never invent a hand by joint number.
+            semantics = {"status": "manual_mapping_required", "reason": str(error)}
+            print(f"[AssetFurnace] Hand mapping needs review: {error}", flush=True)
+        (folder / "skeleton-map.json").write_text(json.dumps(semantics, indent=2), encoding="utf-8")
         carried_review = {**options["reviews"]["model"], "asset_id": identifier}
         (folder / "model-review.json").write_text(
             json.dumps(carried_review, indent=2) + "\n", encoding="utf-8"
@@ -254,7 +289,13 @@ def main() -> None:
         has_image=bool(args.input and args.input.suffix.lower() != ".glb"),
         has_back=bool(args.back_input),
     )
-    if options["stage"] in {"motion-test", "animate"} and not args.asset_id:
+    if (
+        options["stage"] in {"motion-test", "animate"}
+        and not args.asset_id
+        and not (
+            options["stage"] == "motion-test" and args.input and args.input.suffix.lower() == ".glb"
+        )
+    ):
         raise ValueError("Resume a reviewed asset ID for animation")
     if args.input and options["stage"] == "model" and args.input.suffix.lower() != ".glb":
         hashes = {"front": sha256(args.input)}
