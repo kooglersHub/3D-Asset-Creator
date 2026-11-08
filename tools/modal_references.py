@@ -87,6 +87,7 @@ def mask_background(picture):
 
 
 def edit(pictures, prompt, editor, seed):
+    import gc
     import torch
     from diffusers import Flux2KleinPipeline, QwenImageEditPlusPipeline
     from asset_pipeline.models import MODELS
@@ -97,6 +98,7 @@ def edit(pictures, prompt, editor, seed):
     if editor not in _editors:
         # One editor per container avoids retaining two very large GPU models.
         _editors.clear()
+        gc.collect()
         torch.cuda.empty_cache()
         pipeline_class = QwenImageEditPlusPipeline if editor == "qwen-edit" else Flux2KleinPipeline
         pipeline = pipeline_class.from_pretrained(

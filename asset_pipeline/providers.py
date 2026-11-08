@@ -22,6 +22,7 @@ class Providers:
         self.blender = blender
         self.stack = None
         self.apps = {}
+        self.log_directory = None
 
     @contextlib.contextmanager
     def session(self, stage):
@@ -41,22 +42,27 @@ class Providers:
     def blender_run(self, script, *arguments):
         if not self.blender.is_file():
             raise FileNotFoundError("Set --blender to the Blender 4.2+ executable")
-        subprocess.run(
-            [
-                str(self.blender),
-                "--background",
-                "--python-exit-code",
-                "1",
-                "--python",
-                str(TOOLS / script),
-                "--",
-                *map(str, arguments),
-            ],
-            check=True,
-        )
+        command = [
+            str(self.blender),
+            "--background",
+            "--python-exit-code",
+            "1",
+            "--python",
+            str(TOOLS / script),
+            "--",
+            *map(str, arguments),
+        ]
+        if self.log_directory is None:
+            subprocess.run(command, check=True)
+        else:
+            log = self.log_directory / "blender.log"
+            print(f"  Blender log: {log}", flush=True)
+            with log.open("a", encoding="utf-8") as output:
+                subprocess.run(command, check=True, stdout=output, stderr=subprocess.STDOUT)
 
     def execute(self, stage, job, inputs, folder):
         print(f"[{job.identifier}] {stage}", flush=True)
+        self.log_directory = folder
         metadata = getattr(self, stage.replace("-", "_"))(job, inputs, folder) or {}
         files = {
             str(path.relative_to(folder)).replace("\\", "/"): str(path.resolve())

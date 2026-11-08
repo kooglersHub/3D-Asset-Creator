@@ -24,7 +24,9 @@ def import_mesh(path):
     bpy.context.view_layer.objects.active = meshes[0]
     bpy.ops.object.join()
     mesh = bpy.context.object
+    transform = mesh.matrix_world.copy()
     mesh.parent = None
+    mesh.matrix_world = transform
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
     return mesh
 
@@ -43,8 +45,12 @@ def align(high, coarse):
     low_min, low_max = bounds(coarse)
     high_min, high_max = bounds(high)
     factor = max(low_max - low_min) / max(high_max - high_min)
-    high.scale *= factor
-    high.location = (low_max + low_min) / 2 - (high_max + high_min) / 2 * factor
+    high.matrix_world = (
+        Matrix.Translation((low_max + low_min) / 2)
+        @ Matrix.Scale(factor, 4)
+        @ Matrix.Translation(-(high_max + high_min) / 2)
+        @ high.matrix_world
+    )
     bpy.context.view_layer.update()
 
 

@@ -122,6 +122,27 @@ class BatchTests(unittest.TestCase):
                 with RunLock(self.root / "lock"):
                     pass
 
+    def test_props_finish_and_package_without_humanoid_rigging(self):
+        self.jobs = [Job("prop", self.jobs[0].source, {"kind": "prop", "refine": False})]
+        self.run_cloud()
+        self.store.approve(self.jobs[0], "reference", "mask inspected")
+        self.run_cloud()
+        self.store.approve(self.jobs[0], "finish", "mesh inspected")
+        self.runner.run(self.jobs)
+        self.assertEqual(
+            [stage for _, stage in self.provider.calls],
+            ["reference", "model", "refine", "finish", "package"],
+        )
+
+    def test_retry_preserves_failed_attempt_files(self):
+        self.run_cloud()
+        original = json.loads(self.store.task(self.jobs[0], "reference")["result"])
+        self.store.record(self.jobs[0], "reference", "failed", error="fixture interrupted")
+        self.run_cloud(retry_failed=True)
+        replacement = json.loads(self.store.task(self.jobs[0], "reference")["result"])
+        self.assertNotEqual(original["files"], replacement["files"])
+        self.assertTrue(Path(original["files"]["artifact"]).exists())
+
     def test_manifest_rejects_windows_collisions_and_bad_resolution(self):
         manifest = self.root / "batch.json"
         for jobs in [

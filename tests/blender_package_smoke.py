@@ -31,7 +31,10 @@ def smoke():
     mesh.vertex_groups.new(name="RightHand").add(list(range(8)), 1.0, "REPLACE")
     bpy.ops.export_scene.gltf(filepath=str(source / "rigged.glb"), export_format="GLB")
     for name, axis in [("idle", "z"), ("sword_swing", "x")]:
-        rig.animation_data_clear()
+        # Independent source files must not inherit another clip's Blender actions.
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.ops.import_scene.gltf(filepath=str(source / "rigged.glb"))
+        rig = next(obj for obj in bpy.data.objects if obj.type == "ARMATURE")
         pose = rig.pose.bones["RightHand"]
         pose.rotation_mode = "XYZ"
         pose.rotation_euler = (0, 0, 0)

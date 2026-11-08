@@ -5,9 +5,11 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import math
 import os
 import re
 import sqlite3
+import traceback
 from uuid import uuid4
 from dataclasses import dataclass
 from pathlib import Path
@@ -115,6 +117,29 @@ def load_jobs(manifest: Path) -> list[Job]:
             raise ValueError("Invalid triangle or texture budget")
         if not 0.1 <= config["height"] <= 20:
             raise ValueError("Height must be between 0.1 and 20 meters")
+        if type(config["seed"]) is not int or not 0 <= config["seed"] < 2**32:
+            raise ValueError("Seed must be an integer from 0 to 4294967295")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", config.get("test_move", "idle")):
+            raise ValueError("Invalid test move")
+        weapon_config = config.get("weapon")
+        if weapon_config is not None:
+            if not isinstance(weapon_config, dict):
+                raise ValueError("weapon must be an object")
+            for field in ("position", "rotation_degrees"):
+                vector = weapon_config.get(field, [0, 0, 0])
+                if (
+                    not isinstance(vector, list)
+                    or len(vector) != 3
+                    or any(
+                        not isinstance(value, (int, float)) or not math.isfinite(value)
+                        for value in vector
+                    )
+                ):
+                    raise ValueError(f"weapon.{field} must contain three finite numbers")
+            for field in ("scale", "length"):
+                value = weapon_config.get(field, 1)
+                if not isinstance(value, (int, float)) or not 0.001 <= value <= 20:
+                    raise ValueError(f"weapon.{field} must be between 0.001 and 20")
         if not isinstance(config["moves"], list) or not config["moves"]:
             raise ValueError("Provide a nonempty moves list")
         for move in config["moves"]:
@@ -326,6 +351,15 @@ class Runner:
                             self.store.record(job, stage, "complete", result)
                             summary.append((job.identifier, stage, "complete"))
                         except Exception as error:
+                            atomic_json(
+                                folder / "failure.json",
+                                {
+                                    "job": job.identifier,
+                                    "stage": stage,
+                                    "error": str(error),
+                                    "traceback": traceback.format_exc(),
+                                },
+                            )
                             self.store.record(
                                 job, stage, "failed", error=f"{type(error).__name__}: {error}"
                             )
