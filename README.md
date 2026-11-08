@@ -180,6 +180,10 @@ blender --background --python-exit-code 1 --python tools/preview_asset.py -- --e
 blender --background --python-exit-code 1 --python tools/check_blender_imports.py -- exports/Knight-hi3d
 ```
 
+For a geometry comparison without the coarse model's textures, add
+`--material-mode clay` to the preview command. Both meshes then use the same
+neutral material; this helps distinguish actual shape detail from painted shading.
+
 Important differences:
 - Geometry only: no UV textures, materials, colors, rig or animation are generated.
   Transfer or create textures in Blender, then import the textured result through
@@ -190,11 +194,13 @@ Important differences:
   not turn a posed character into an A-pose.
 - The adapter uses its own pinned source/model revisions, Python 3.10 and CUDA 12.4
   image, with a separate `3d-asset-creator-hi3d` volume. It follows the upstream
-  PyTorch/kernel constraints. Building flash-attn can take considerable time.
+  PyTorch/kernel constraints. FlashAttention uses the matching official release
+  wheel for Python 3.10, CUDA 12 and PyTorch 2.5, avoiding a long source build.
 - Inference requests a Modal H200; this is a separate, more expensive GPU choice
   than the existing L40S workflow. The default starts at 512, with sequential CPU
   offload. `--resolution 1024` and `1536` are optional. The upstream measured the
-  high-resolution path on a 96 GB H20; this H200 adapter is **not GPU-validated**.
+  high-resolution path on a 96 GB H20. One 512 run completed on Modal H200;
+  1024/1536 remain untested. See [the measured run](docs/HI3D_VALIDATION.md).
 - Setup downloads the refiner, DINOv2 and CLIP explicitly. It reserves no GPU, but
   CPU builds, downloads, storage and later inference may incur Modal charges.
 

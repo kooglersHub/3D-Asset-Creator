@@ -59,10 +59,20 @@ def setup_scene(size, samples):
     return center, extent
 
 
-def render_file(source, destination, frames, size, samples):
+def render_file(source, destination, frames, size, samples, material_mode="textured"):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(source))
     scene = bpy.context.scene
+    if material_mode == "clay":
+        material = bpy.data.materials.new("Geometry comparison")
+        material.use_nodes = True
+        shader = material.node_tree.nodes["Principled BSDF"]
+        shader.inputs["Base Color"].default_value = (0.45, 0.45, 0.45, 1)
+        shader.inputs["Roughness"].default_value = 0.7
+        for obj in scene.objects:
+            if obj.type == "MESH":
+                obj.data.materials.clear()
+                obj.data.materials.append(material)
     actions = [
         obj.animation_data.action
         for obj in scene.objects
@@ -97,6 +107,7 @@ def render_file(source, destination, frames, size, samples):
     meshes = [obj for obj in scene.objects if obj.type == "MESH" and obj.visible_get()]
     return {
         "file": source.name,
+        "material_mode": material_mode,
         "images": images,
         "triangles": sum(len(poly.vertices) - 2 for obj in meshes for poly in obj.data.polygons),
         "frames": times,
@@ -111,6 +122,7 @@ def main():
     parser.add_argument("--frames", type=int, default=4)
     parser.add_argument("--size", type=int, default=512)
     parser.add_argument("--samples", type=int, default=16)
+    parser.add_argument("--material-mode", choices=["textured", "clay"], default="textured")
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :])
     if min(args.frames, args.size, args.samples) < 1:
         raise ValueError("Frames, size and samples must be positive")
@@ -129,7 +141,11 @@ def main():
         source = (directory / name).resolve()
         if not source.is_relative_to(directory):
             raise ValueError("Preview path escapes export folder")
-        rows.append(render_file(source, destination, args.frames, args.size, args.samples))
+        rows.append(
+            render_file(
+                source, destination, args.frames, args.size, args.samples, args.material_mode
+            )
+        )
     (destination / "report.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
 
 
