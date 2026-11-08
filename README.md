@@ -194,7 +194,8 @@ Important differences:
   not turn a posed character into an A-pose.
 - The adapter uses its own pinned source/model revisions, Python 3.10 and CUDA 12.4
   image, with a separate `3d-asset-creator-hi3d` volume. It follows the upstream
-  PyTorch/kernel constraints. Building flash-attn can take considerable time.
+  PyTorch/kernel constraints. FlashAttention uses the matching official release
+  wheel for Python 3.10, CUDA 12 and PyTorch 2.5, avoiding a long source build.
 - Inference requests a Modal H200; this is a separate, more expensive GPU choice
   than the existing L40S workflow. The default starts at 512, with sequential CPU
   offload. `--resolution 1024` and `1536` are optional. The upstream measured the

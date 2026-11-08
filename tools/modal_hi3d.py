@@ -23,9 +23,14 @@ from hi3d_support import (
 from quality_workflow import extract_export, read_json, sha256, write_json
 
 VOLUME_NAME = "3d-asset-creator-hi3d"
-CACHE = Path("/hi3d-cache")
+CACHE_ROOT = "/hi3d-cache"
+CACHE = Path(CACHE_ROOT)
 REPO = "/opt/hi3d"
 MODEL_NAMES = ("refiner", "dino", "clip")
+FLASH_ATTN_WHEEL = (
+    "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/"
+    "flash_attn-2.7.4.post1%2Bcu12torch2.5cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
+)
 
 image = (
     modal.Image.from_registry("nvidia/cuda:12.4.1-devel-ubuntu22.04", add_python="3.10")
@@ -51,11 +56,10 @@ image = (
         "torch==2.5.0+cu124 torchvision==0.20.0+cu124 "
         "--extra-index-url https://download.pytorch.org/whl/cu124",
         "python -m pip install packaging ninja psutil",
-        f"python -m pip install -c {REPO}/docker/constraints.txt "
-        "--no-build-isolation flash-attn==2.7.4.post1",
+        f"python -m pip install -c {REPO}/docker/constraints.txt '{FLASH_ATTN_WHEEL}'",
         f"python -m pip install -c {REPO}/docker/constraints.txt '{REPO}[inference]'",
     )
-    .env({"HF_HOME": str(CACHE / "huggingface"), "HF_HUB_DISABLE_XET": "1"})
+    .env({"HF_HOME": f"{CACHE_ROOT}/huggingface", "HF_HUB_DISABLE_XET": "1"})
 )
 for module in ("quality_workflow.py", "hi3d_support.py"):
     image = image.add_local_file(str(Path(__file__).with_name(module)), f"/root/{module}")
@@ -64,7 +68,7 @@ app = modal.App("3d-asset-creator-hi3d")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
 
-@app.function(image=image, volumes={str(CACHE): volume}, timeout=7200, cpu=8, memory=32768)
+@app.function(image=image, volumes={CACHE_ROOT: volume}, timeout=7200, cpu=8, memory=32768)
 def setup_hi3d() -> str:
     """Explicitly download all three pinned components without reserving a GPU."""
     from huggingface_hub import snapshot_download
@@ -87,11 +91,13 @@ def setup_hi3d() -> str:
 @app.function(
     image=image,
     gpu="H200",
-    volumes={str(CACHE): volume},
+    volumes={CACHE_ROOT: volume},
     timeout=3600,
     cpu=8,
     memory=65536,
     max_containers=1,
+    retries=0,
+    scaledown_window=10,
 )
 def refine_geometry(
     reference_bytes: bytes,
