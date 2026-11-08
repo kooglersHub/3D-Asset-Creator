@@ -148,6 +148,64 @@ clip, and review the new exports. Local repairs do not change the server asset;
 cloud-generated clips need the repair reapplied. Cloth needs suitable weighting
 or its own bones/simulation; rigid binding is for rigid equipment only.
 
+## Optional Hi3D 1.0 geometry refinement
+
+[Powered by Hi3D 1.0](https://hi3d.ai/).
+
+Hi3D 1.0 is a **refiner**, not the A-pose editor or an automatic replacement for
+the textured-character pipeline. It takes an existing static coarse mesh and the
+same reference image. Use Pixal3D for the coarse model, then compare a Hi3D result.
+The original input and existing AssetFurnace installation are preserved.
+
+Explicit one-time setup, separate from the normal setup:
+
+```powershell
+modal run tools/modal_hi3d.py --action setup
+```
+
+Then refine the raw mesh in a static export:
+
+```powershell
+modal run tools/modal_hi3d.py --image-path references/front.png --coarse-export exports/Knight-model --resolution 512 --output exports/Knight-hi3d.zip
+```
+
+Or supply `--model-path coarse.glb` instead of `--coarse-export`. The export form
+checks the reference hash when the original generation recorded it and rejects
+animated inputs. A manually supplied GLB must be unrigged and match the image.
+
+The ZIP is extracted and supports the existing preview and static import checks:
+
+```powershell
+blender --background --python-exit-code 1 --python tools/preview_asset.py -- --export exports/Knight-hi3d
+blender --background --python-exit-code 1 --python tools/check_blender_imports.py -- exports/Knight-hi3d
+```
+
+Important differences:
+- Geometry only: no UV textures, materials, colors, rig or animation are generated.
+  Transfer or create textures in Blender, then import the textured result through
+  `modal_assetfurnace.py --model-path ...` for a fresh static review.
+- Hi3D recenters and normalizes the result; original world scale and origin are not
+  preserved. Align it to the coarse mesh before texture transfer or equipment work.
+- Structural errors and pose problems in the coarse input can persist. Hi3D does
+  not turn a posed character into an A-pose.
+- The adapter uses its own pinned source/model revisions, Python 3.10 and CUDA 12.4
+  image, with a separate `3d-asset-creator-hi3d` volume. It follows the upstream
+  PyTorch/kernel constraints. Building flash-attn can take considerable time.
+- Inference requests a Modal H200; this is a separate, more expensive GPU choice
+  than the existing L40S workflow. The default starts at 512, with sequential CPU
+  offload. `--resolution 1024` and `1536` are optional. The upstream measured the
+  high-resolution path on a 96 GB H20; this H200 adapter is **not GPU-validated**.
+- Setup downloads the refiner, DINOv2 and CLIP explicitly. It reserves no GPU, but
+  CPU builds, downloads, storage and later inference may incur Modal charges.
+
+The code and all three model revisions are recorded in the manifest together with
+source hashes, normalization and texture limitations. Geometry-only output cannot
+receive a character model approval through the review tool.
+The [Hi3D license](https://github.com/hi3d-official/Hi3Dv1.0/blob/13657ad09afaa92e350b461a1cd66399e44a59c4/LICENSE)
+is a custom license; retain its notices and integration attribution requirements.
+See the [official model card](https://huggingface.co/hi3d-official/Hi3Dv1.0)
+for installation requirements, scope and hardware validation.
+
 ## Development and validation
 
 ```powershell

@@ -64,7 +64,7 @@ def inspect_export(path, animated):
 def main():
     directory = Path(sys.argv[sys.argv.index("--") + 1])
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("stage") in {"model", "prop"}:
+    if manifest.get("stage") in {"model", "prop", "geometry-review"}:
         files = {"model.glb"}
         files.update(variant["file"] for variant in manifest.get("variants", {}).values())
         if (directory / "raw_model.glb").is_file():

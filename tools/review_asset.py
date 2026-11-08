@@ -40,6 +40,11 @@ def prepare(front: Path, back: Path | None, destination: Path) -> None:
 
 def export_review(directory: Path, kind: str) -> dict:
     manifest = read_json(directory / "manifest.json")
+    if manifest.get("geometry_only"):
+        raise ValueError(
+            "Hi3D output is geometry-only. Add/transfer textures and import a new "
+            "static AssetFurnace model before approving it for character rigging."
+        )
     hashes = {"model": sha256(directory / "model.glb")}
     if kind == "motion":
         moves = manifest["moves"]
