@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -19,14 +20,28 @@ def imported_rig(path):
 
 
 def skeleton_signature(rig):
-    return [
-        (
-            bone.name,
+    return {
+        bone.name: (
             bone.parent.name if bone.parent else None,
-            tuple(round(value, 5) for row in bone.matrix_local for value in row),
+            tuple(value for row in bone.matrix_local for value in row),
         )
         for bone in rig.data.bones
-    ]
+    }
+
+
+def compatible_skeletons(left, right):
+    if left.keys() != right.keys():
+        return False
+    # GLB round trips introduce sub-micrometer float drift. Rounding then exact
+    # equality rejects values that straddle a decimal boundary despite being equal.
+    return all(
+        left[name][0] == right[name][0]
+        and all(
+            math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-5)
+            for a, b in zip(left[name][1], right[name][1])
+        )
+        for name in left
+    )
 
 
 def assemble(rig_path, clips, output, hand_bone=""):
@@ -37,7 +52,7 @@ def assemble(rig_path, clips, output, hand_bone=""):
     base.animation_data_create()
     for name, path in clips.items():
         other, objects = imported_rig(path)
-        if skeleton_signature(other) != signature:
+        if not compatible_skeletons(skeleton_signature(other), signature):
             raise ValueError(f"Clip {name} has a different skeleton/rest pose")
         data = other.animation_data
         actions = []

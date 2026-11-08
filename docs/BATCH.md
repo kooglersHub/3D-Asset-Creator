@@ -110,8 +110,10 @@ call `set_speed`, `attack`, `hit`, `die` on the visual adapter. It handles clip
 playback and one-shot return to locomotion, not combat damage or hitboxes.
 The weapon stays separate and follows `BoneAttachment3D` rigidly.
 
-Automatic semantic hand names are supported. If the skeleton uses numbered or
-ambiguous bones, packaging stops with the bone list: set `weapon.hand_bone`
+Automatic semantic hand names and numbered SkinTokens bones are supported.
+The worker reuses AssetFurnace's humanoid topology/geometry mapper and exports
+`skeleton-map.json`. If it cannot identify one right hand, packaging stops with
+the bone list: set `weapon.hand_bone`
 explicitly. Adjust `position`, `rotation_degrees`, `scale`, and `length` after
 checking the grip. Weapon origin defaults to the center of its bottom bounding
 plane; arbitrary generated swords can need a manual grip offset. Direction,

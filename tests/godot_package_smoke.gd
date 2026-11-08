@@ -14,7 +14,7 @@ func check_package() -> void:
 	assert(visual.player.has_animation("sword_swing"))
 	assert(visual.player.current_animation == "idle")
 	var attachment = visual.find_children("*", "BoneAttachment3D", true, false)[0]
-	assert(attachment.bone_name == "RightHand")
+	assert(attachment.bone_name == "bone_7")
 	var weapon = attachment.get_child(0)
 	visual.player.advance(0.01)
 	var original_position: Vector3 = weapon.global_position

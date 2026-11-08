@@ -241,6 +241,16 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
             raise ValueError("Animation changed the reviewed model unexpectedly")
         save_glb(record[surface_field], folder / "model.glb")
         save_glb(record["rigged"], folder / "rigged.glb")
+        from rig_semantics import map_glb
+
+        try:
+            semantics = map_glb(folder / "rigged.glb", ASSETFURNACE / "scripts/kimodo_retarget.py")
+        except (ValueError, KeyError, ImportError, OSError) as error:
+            # Keep a valid rig usable with explicit bone selection if the mapper
+            # cannot label this topology; never invent a hand by joint number.
+            semantics = {"status": "manual_mapping_required", "reason": str(error)}
+            print(f"[AssetFurnace] Hand mapping needs review: {error}", flush=True)
+        (folder / "skeleton-map.json").write_text(json.dumps(semantics, indent=2), encoding="utf-8")
         carried_review = {**options["reviews"]["model"], "asset_id": identifier}
         (folder / "model-review.json").write_text(
             json.dumps(carried_review, indent=2) + "\n", encoding="utf-8"

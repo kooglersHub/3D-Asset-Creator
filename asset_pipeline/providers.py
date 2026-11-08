@@ -227,13 +227,22 @@ class Providers:
             shutil.copy2(inputs["finish"]["files"]["model.glb"], destination / "model.glb")
         else:
             files = inputs["animate"]["files"]
+            hand = (
+                job.config.get("weapon", {}).get("hand_bone", "auto")
+                if job.config.get("weapon")
+                else ""
+            )
+            mapping_path = files.get("export/skeleton-map.json")
+            if hand == "auto" and mapping_path:
+                mapping = json.loads(Path(mapping_path).read_text())
+                if mapping.get("status") == "mapped":
+                    hand = mapping["hand_bone"]
+                    shutil.copy2(mapping_path, destination / "skeleton-map.json")
             spec = {
                 "rig": files["export/rigged.glb"],
                 "clips": {move: files[f"export/{move}.glb"] for move in job.config["moves"]},
                 "output": str(destination / "model.glb"),
-                "hand_bone": job.config.get("weapon", {}).get("hand_bone", "auto")
-                if job.config.get("weapon")
-                else "",
+                "hand_bone": hand,
             }
             atomic_json(folder / "assembly.json", spec)
             self.blender_run("assemble_character.py", "--spec", folder / "assembly.json")

@@ -74,6 +74,9 @@ image = image.add_local_file(
     str(Path(__file__).with_name("quality_workflow.py")),
     remote_path="/root/quality_workflow.py",
 )
+image = image.add_local_file(
+    str(Path(__file__).with_name("rig_semantics.py")), remote_path="/root/rig_semantics.py"
+)
 
 app = modal.App(APP_NAME)
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
