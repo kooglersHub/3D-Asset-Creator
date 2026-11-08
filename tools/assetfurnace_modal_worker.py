@@ -231,7 +231,7 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
                 studio,
                 asset_id=identifier,
                 up_to="animated",
-                again=True,
+                again=bool(record.get("rigged")),
                 move=move,
                 advanced=advanced,
             )

@@ -113,7 +113,8 @@ def main():
             for row in summary:
                 print(" / ".join(row))
             if any(
-                row[2] in {"failed", "corrupt-output", "corrupt-input", "stale-output"}
+                row[2]
+                in {"failed", "corrupt-output", "corrupt-input", "stale-output", "stale-input"}
                 for row in summary
             ):
                 raise SystemExit(1)

@@ -1,6 +1,8 @@
 """Create two real clips and run the production Godot package adapter without AI/cloud."""
 
 import math
+import json
+import struct
 import sys
 from pathlib import Path
 
@@ -67,14 +69,11 @@ def smoke():
         },
         output,
     )
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=str(output / "Assets/Generated/Fixture/model.glb"))
-    imported = next(obj for obj in bpy.data.objects if obj.type == "ARMATURE")
-    actions = {
-        strip.action.name for track in imported.animation_data.nla_tracks for strip in track.strips
-    }
-    actions.add(imported.animation_data.action.name)
-    assert {"idle", "sword_swing"} <= actions, actions
+    data = (output / "Assets/Generated/Fixture/model.glb").read_bytes()
+    length = struct.unpack_from("<I", data, 12)[0]
+    document = json.loads(data[20 : 20 + length])
+    names = {animation["name"] for animation in document["animations"]}
+    assert names == {"idle", "sword_swing"}, names
     (output / "project.godot").write_text(
         '[application]\nconfig/name="Generated asset smoke"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n'
     )
