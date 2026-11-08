@@ -33,6 +33,10 @@ class Providers:
 
     def cloud(self, name):
         if name not in self.apps:
+            import modal
+
+            if not self.apps:
+                self.stack.enter_context(modal.enable_output())
             sys.path.insert(0, str(TOOLS))
             module = importlib.import_module(f"tools.{name}")
             self.stack.enter_context(module.app.run())

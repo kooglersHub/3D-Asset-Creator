@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 from pathlib import Path
 
@@ -26,6 +27,7 @@ image = (
         "safetensors==0.6.2",
         "diffusers==0.37.0",
     )
+    .pip_install("kornia==0.8.2")
     .env({"HF_HOME": "/weights/huggingface", "HF_HUB_DISABLE_TELEMETRY": "1"})
     .add_local_dir(str(ROOT / "asset_pipeline"), remote_path="/root/asset_pipeline")
 )
@@ -50,18 +52,8 @@ def setup(editor: str = "qwen-edit"):
     return {"installed": editor, "masker": "birefnet"}
 
 
-def mask_background(picture):
+def get_masker():
     global _masker
-    if "A" in picture.getbands():
-        alpha_min, alpha_max = picture.getchannel("A").getextrema()
-        if alpha_max == 0:
-            raise ValueError("Source image is fully transparent")
-        if alpha_min < 250:
-            # Preserve an existing artist-provided cutout, including dark armor
-            # and thin fingers that a second segmentation pass could erase.
-            return picture.convert("RGBA")
-    import torch
-    from torchvision import transforms
     from transformers import AutoModelForImageSegmentation
     from asset_pipeline.models import MODELS
 
@@ -77,6 +69,21 @@ def mask_background(picture):
             .eval()
             .cpu()
         )
+    return _masker
+
+
+def mask_background(picture):
+    if "A" in picture.getbands():
+        alpha_min, alpha_max = picture.getchannel("A").getextrema()
+        if alpha_max == 0:
+            raise ValueError("Source image is fully transparent")
+        if alpha_min < 250:
+            # Preserve artist-provided dark armor and thin fingers.
+            return picture.convert("RGBA")
+    import torch
+    from torchvision import transforms
+
+    masker = get_masker()
     original = picture.convert("RGB")
     transform = transforms.Compose(
         [
@@ -86,7 +93,7 @@ def mask_background(picture):
         ]
     )
     with torch.inference_mode():
-        prediction = _masker(transform(original).unsqueeze(0))[-1].sigmoid().squeeze().cpu()
+        prediction = masker(transform(original).unsqueeze(0))[-1].sigmoid().squeeze().cpu()
     alpha = transforms.ToPILImage()(prediction).resize(original.size)
     if alpha.getbbox() is None or alpha.getextrema()[0] >= 250:
         raise ValueError("Background removal produced no usable foreground mask")
@@ -131,6 +138,22 @@ def edit(pictures, prompt, editor, seed):
     return _editors[editor](**parameters).images[0]
 
 
+def cached_edit(directory, name, pictures, prompt, editor, seed):
+    from PIL import Image
+
+    path = directory / f"{name}.png"
+    if path.is_file():
+        with Image.open(path) as picture:
+            return picture.copy()
+    result = edit(pictures, prompt, editor, seed)
+    temporary = path.with_suffix(".tmp")
+    result.save(temporary, format="PNG")
+    temporary.replace(path)
+    weights.commit()
+    print(f"[References] Saved {name} checkpoint", flush=True)
+    return result
+
+
 @app.function(
     image=image,
     gpu="H200",
@@ -144,7 +167,24 @@ def edit(pictures, prompt, editor, seed):
 )
 def generate(source: bytes, config: dict, weapon: bytes | None = None) -> dict[str, bytes]:
     from PIL import Image
-    from asset_pipeline.models import FRONT_PROMPT, BACK_PROMPT, WEAPON_PROMPT
+    from asset_pipeline.models import FRONT_PROMPT, BACK_PROMPT, WEAPON_PROMPT, MODELS
+
+    key = hashlib.sha256(
+        json.dumps(
+            {
+                "source": hashlib.sha256(source).hexdigest(),
+                "config": config,
+                "models": MODELS,
+                "weapon": hashlib.sha256(weapon).hexdigest() if weapon else None,
+                "prompts": [FRONT_PROMPT, BACK_PROMPT, WEAPON_PROMPT],
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    cache = Path("/weights/reference-runs") / key
+    cache.mkdir(parents=True, exist_ok=True)
+    # Validate custom model imports before spending GPU time on edited images.
+    get_masker()
 
     original = mask_background(Image.open(io.BytesIO(source)))
     white = Image.new("RGB", original.size, "white")
@@ -153,14 +193,28 @@ def generate(source: bytes, config: dict, weapon: bytes | None = None) -> dict[s
     if config.get("kind", "humanoid") == "prop":
         outputs = {"front": original}
     else:
-        front = edit([white], FRONT_PROMPT, editor, seed)
-        back = edit([white, front], BACK_PROMPT, editor, seed + 1)
+        front = cached_edit(cache, "front", [white], FRONT_PROMPT, editor, seed)
+        back = cached_edit(cache, "back", [white, front], BACK_PROMPT, editor, seed + 1)
         outputs = {"front": mask_background(front), "back": mask_background(back)}
     if config.get("weapon"):
+        weapon_prompt = WEAPON_PROMPT + (
+            " Match the source image's realistic rendered 3D game-asset style exactly. "
+            "Weathered dark steel with physically based metallic reflections, bevels, "
+            "subtle blue highlights, worn leather grip and fine surface detail. "
+            "A studio product render of a real three-dimensional sword, not a drawing. "
+            "No cartoon outlines, no cel shading, no flat illustration."
+        )
         weapon_image = (
             Image.open(io.BytesIO(weapon))
             if weapon
-            else edit([white], WEAPON_PROMPT, editor, seed + 2)
+            else cached_edit(
+                cache,
+                "weapon-" + hashlib.sha256(weapon_prompt.encode()).hexdigest()[:12],
+                [white],
+                weapon_prompt,
+                editor,
+                seed + 2,
+            )
         )
         outputs["weapon"] = mask_background(weapon_image)
     result = {}

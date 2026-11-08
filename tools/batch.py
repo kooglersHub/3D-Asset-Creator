@@ -11,7 +11,7 @@ from asset_pipeline.batch import STAGES, Runner, Store, atomic_json, load_jobs
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["init", "plan", "run", "status", "approve"])
+    parser.add_argument("action", choices=["init", "plan", "run", "status", "approve", "reject"])
     parser.add_argument("--manifest", type=Path, default=Path("batch.json"))
     parser.add_argument("--input-dir", type=Path)
     parser.add_argument("--output", type=Path, default=Path("exports/batch"))
@@ -81,15 +81,15 @@ def main():
         return
     store = Store(args.output)
     try:
-        if args.action == "approve":
+        if args.action in {"approve", "reject"}:
             if not args.job or not args.stage or not args.note.strip():
-                parser.error("approve requires --job, --stage and --note after visual inspection")
+                parser.error("review requires --job, --stage and --note after visual inspection")
             from asset_pipeline.batch import RunLock
 
             with RunLock(store.root / "runner.lock"):
                 for job in jobs:
-                    store.approve(job, args.stage, args.note)
-                    print(f"Reviewed {job.identifier}/{args.stage}")
+                    getattr(store, args.action)(job, args.stage, args.note)
+                    print(f"{args.action}: {job.identifier}/{args.stage}")
         elif args.action == "status":
             for job in jobs:
                 for stage in job.stages():

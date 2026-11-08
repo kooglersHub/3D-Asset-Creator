@@ -249,6 +249,22 @@ class Store:
         )
         self.db.commit()
 
+    def reject(self, job, stage, note):
+        task = self.task(job, stage)
+        if task is None or task["status"] != "complete":
+            raise ValueError("Only a completed stage can be rejected")
+        stages = list(job.stages())
+        for dependent in stages[stages.index(stage) :]:
+            row = self.task(job, dependent)
+            if row is not None:
+                self.record(
+                    job,
+                    dependent,
+                    "failed",
+                    json.loads(row["result"]),
+                    error=f"Review rejected {stage}: {note}",
+                )
+
 
 def intact(result: dict) -> bool:
     return bool(result and result.get("checksums")) and all(

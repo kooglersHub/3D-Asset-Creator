@@ -24,7 +24,7 @@ The existing Hi3D result is documented in [HI3D_VALIDATION.md](HI3D_VALIDATION.m
 | Excluded default | [Hunyuan3D-2mini license](https://huggingface.co/tencent/Hunyuan3D-2mini/blob/main/LICENSE) | Tencent Community terms contain territorial restrictions including the EU. Not silently selected for this German user. |
 
 Exact image-model and TRELLIS weight revisions are in
-`asset_pipeline/models.py`; diffusers and TRELLIS source commits are pinned.
+`asset_pipeline/models.py`; the diffusers package version and TRELLIS source commit are pinned.
 The official BiRefNet custom model code is downloaded at a pinned revision and
 loaded locally with `trust_remote_code`. Hi3D and AssetFurnace have their own
 existing pinned revisions. TRELLIS's DINO encoder mirror is checksum-verified;

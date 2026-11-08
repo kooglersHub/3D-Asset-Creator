@@ -10,6 +10,7 @@ compile GPU extensions (charged) and download TRELLIS.2 weights.
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -103,7 +104,7 @@ def _get_pipeline():
 
     print("Lade TRELLIS.2-Gewichte (nur beim ersten Mal) ...", flush=True)
     snapshot = Path(snapshot_download(MODEL_ID, revision=MODEL_REVISION, local_files_only=True))
-    model_dir = Path("/models/trellis2_4b_local")
+    model_dir = Path("/models") / ("trellis2_" + MODEL_REVISION)
     model_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_link = model_dir / "ckpts"
     if not checkpoint_link.exists():
@@ -149,6 +150,30 @@ def generate_png_to_glb(
     if texture_size not in (1024, 2048, 4096):
         raise ValueError("texture_size muss 1024, 2048 oder 4096 sein")
 
+    key = hashlib.sha256(
+        json.dumps(
+            {
+                "image": hashlib.sha256(png_data).hexdigest(),
+                "resolution": resolution,
+                "triangles": decimation_target,
+                "texture_size": texture_size,
+                "seed": seed,
+                "model_revision": MODEL_REVISION,
+                "dino_sha256": DINO_SHA256,
+                "source_revision": "75fbf0183001ed9876c8dbb35de6b68552ee08bd",
+                "export_schema": 1,
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    cached = Path("/models/generated") / (key + ".glb")
+    if cached.is_file():
+        result = cached.read_bytes()
+        if not result.startswith(b"glTF"):
+            raise ValueError(f"Corrupt cached GLB; inspect before retry: {cached}")
+        print(f"[TRELLIS.2] Reused completed model {key}", flush=True)
+        return result
+
     image_in = Image.open(io.BytesIO(png_data)).convert("RGBA")
     alpha = np.asarray(image_in.getchannel("A"))
     if alpha.min() == 255 or alpha.max() == 0:
@@ -183,6 +208,11 @@ def generate_png_to_glb(
     result = file_obj.getvalue()
     if not result.startswith(b"glTF"):
         raise RuntimeError("GLB output header invalid")
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    temporary = cached.with_suffix(".tmp")
+    temporary.write_bytes(result)
+    temporary.replace(cached)
+    weights.commit()
     return result
 
 

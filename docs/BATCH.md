@@ -80,6 +80,11 @@ python tools/batch.py approve --manifest batch.json --job DarkKnight --stage ref
 python tools/batch.py run --manifest batch.json --execute-cloud --max-cloud-tasks 2
 ```
 
+If an output fails visual inspection, use `reject --job ID --stage STAGE --note "reason"`.
+This preserves its artifacts, invalidates dependent stages, and requires an explicit
+`run --retry-failed` before more work. Completed reference images and TRELLIS
+exports are also cached remotely so a later stage failure does not repeat them.
+
 Then approve `finish`, run the single `motion-test`, approve that, run `animate`,
 approve all clips, and run again for local packaging. `--job` can be repeated to
 review a selected set or limit production. Each review is bound to SHA-256 of
