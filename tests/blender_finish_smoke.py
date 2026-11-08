@@ -22,10 +22,21 @@ def smoke():
         shader.inputs["Base Color"].default_value = (0.8, 0.02, 0.01, 1)
         shader.inputs["Metallic"].default_value = 0.7
         shader.inputs["Roughness"].default_value = 0.3
+        image = bpy.data.images.new("SourcePattern", width=64, height=64)
+        image.pixels = [
+            channel
+            for y in range(64)
+            for x in range(64)
+            for channel in ((0.8 if (x // 8 + y // 8) % 2 else 0.4), 0.02, 0.01, 1)
+        ]
+        image.pack()
+        texture = material.node_tree.nodes.new("ShaderNodeTexImage")
+        texture.image = image
+        material.node_tree.links.new(texture.outputs["Color"], shader.inputs["Base Color"])
         source.data.materials.append(material)
         coarse = root / "coarse.glb"
         bpy.ops.export_scene.gltf(filepath=str(coarse), export_format="GLB")
-        report = finish(coarse, None, root / "finished/model.glb", 300, 64, 1.9)
+        report = finish(coarse, coarse, root / "finished/model.glb", 300, 64, 1.9)
         assert report["triangles"] <= 302, report
         pixels = list(bpy.data.images["Base Color"].pixels)
         colored = [
@@ -43,7 +54,17 @@ def smoke():
         )
         assert abs(minimum.z) < 0.001
         assert len([image for image in bpy.data.images if image.size[0] == 64]) >= 3
-        print("PBR bake, triangle budget and Godot-meter scale passed")
+        preserved = finish(coarse, None, root / "preserved/model.glb", 300, 64, 1.9)
+        assert preserved["source_uvs_preserved"]
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.ops.import_scene.gltf(filepath=str(root / "preserved/model.glb"))
+        mesh = next(obj for obj in bpy.data.objects if obj.type == "MESH")
+        tree = mesh.data.materials[0].node_tree
+        textures = [node.image for node in tree.nodes if node.type == "TEX_IMAGE"]
+        assert textures and textures[0].size[0] == 64
+        reds = list(textures[0].pixels)[::4]
+        assert max(reds) - min(reds) > 0.2, "Source texture pattern was lost"
+        print("PBR rebake, source texture preservation, triangle budget and meter scale passed")
 
 
 smoke()

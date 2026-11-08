@@ -117,6 +117,28 @@ def bake_channel(source, target, material, channel, size, distance, directory):
         material.node_tree.links.new(node.outputs["Color"], shader.inputs[channel])
 
 
+def bake_material(coarse, high, low, output, texture_size):
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(island_margin=0.02)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    material = bpy.data.materials.new("BakedPBR")
+    material.use_nodes = True
+    low.data.materials.clear()
+    low.data.materials.append(material)
+    for face in low.data.polygons:
+        face.material_index = 0
+    minimum, maximum = bounds(coarse)
+    distance = max(maximum - minimum) * 0.05
+    if high != coarse:
+        high.hide_render = True
+    for channel in ("Base Color", "Roughness", "Metallic"):
+        bake_channel(coarse, low, material, channel, texture_size, distance, output.parent)
+    coarse.hide_render = high != coarse
+    high.hide_render = False
+    bake_channel(high, low, material, "Normal", texture_size, distance, output.parent)
+
+
 def finish(coarse_path, high_path, output, triangles, texture_size, height):
     output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -140,25 +162,8 @@ def finish(coarse_path, high_path, output, triangles, texture_size, height):
         modifier = low.modifiers.new("Game triangle budget", "DECIMATE")
         modifier.ratio = triangles / count
         bpy.ops.object.modifier_apply(modifier=modifier.name)
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(island_margin=0.02)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    material = bpy.data.materials.new("BakedPBR")
-    material.use_nodes = True
-    low.data.materials.clear()
-    low.data.materials.append(material)
-    for face in low.data.polygons:
-        face.material_index = 0
-    minimum, maximum = bounds(coarse)
-    distance = max(maximum - minimum) * 0.05
-    if high != coarse:
-        high.hide_render = True
-    for channel in ("Base Color", "Roughness", "Metallic"):
-        bake_channel(coarse, low, material, channel, texture_size, distance, output.parent)
-    coarse.hide_render = high != coarse
-    high.hide_render = False
-    bake_channel(high, low, material, "Normal", texture_size, distance, output.parent)
+    if high_path:
+        bake_material(coarse, high, low, output, texture_size)
     minimum, maximum = bounds(low)
     factor = height / (maximum.z - minimum.z)
     for vertex in low.data.vertices:
@@ -183,7 +188,10 @@ def finish(coarse_path, high_path, output, triangles, texture_size, height):
         "triangles": sum(len(face.vertices) - 2 for face in low.data.polygons),
         "height_m": height,
         "texture_size": texture_size,
-        "method": "decimation, smart UV, source PBR bake, high-to-low tangent normal",
+        "method": "decimation, smart UV, source PBR bake, high-to-low tangent normal"
+        if high_path
+        else "UV and PBR preserving decimation",
+        "source_uvs_preserved": not bool(high_path),
         "human_review_required": True,
     }
     output.with_suffix(".json").write_text(json.dumps(report, indent=2))

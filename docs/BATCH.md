@@ -102,9 +102,11 @@ images must remain unchanged after approval; keep review notes in the database.
 ## Finish and Godot integration
 
 Blender runs locally on CPU. `--blender` accepts any Blender 4.2+ executable.
-The finish tool decimates and creates UVs; it is not animation-aware quad
-retopology. It bakes base color, roughness and metallic from the coarse PBR
-surface, then high-to-low tangent normals. Hi3D's geometry-only mesh is aligned
+The finish tool decimates while preserving TRELLIS UVs and PBR materials by
+default; it is not animation-aware quad retopology. Re-baking an unchanged
+layered armor mesh can produce projection artifacts and is deliberately avoided.
+When Hi3D changes the geometry, the finish path creates UVs and bakes source base
+color, roughness, metallic and high-to-low tangent normals. Hi3D's mesh is aligned
 back into coarse-mesh space before projection. Large topology changes can still
 produce bad texture projections and must be rejected during review.
 

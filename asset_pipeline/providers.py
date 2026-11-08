@@ -96,10 +96,11 @@ class Providers:
         for role in ("front", "weapon"):
             reference = inputs["reference"]["files"].get(f"{role}.png")
             if reference:
+                target = job.config["triangles"] if role == "front" else 5000
                 data = module.generate_png_to_glb.remote(
                     Path(reference).read_bytes(),
                     job.config["resolution"],
-                    max(job.config["triangles"] * 4, 10000),
+                    max(target * 4, 10000),
                     job.config["texture_size"],
                     job.config["seed"],
                 )

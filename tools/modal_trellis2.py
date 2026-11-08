@@ -199,7 +199,7 @@ def generate_png_to_glb(
         remesh=True,
         remesh_band=1,
         remesh_project=0,
-        verbose=False,
+        verbose=True,
     )
     # Standard glTF textures, compatible with Blender and game engines.
     # WebP export can fail on upstream pillow-simd builds without WebP support.
