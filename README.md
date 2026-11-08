@@ -199,7 +199,8 @@ Important differences:
 - Inference requests a Modal H200; this is a separate, more expensive GPU choice
   than the existing L40S workflow. The default starts at 512, with sequential CPU
   offload. `--resolution 1024` and `1536` are optional. The upstream measured the
-  high-resolution path on a 96 GB H20; this H200 adapter is **not GPU-validated**.
+  high-resolution path on a 96 GB H20. One 512 run completed on Modal H200;
+  1024/1536 remain untested. See [the measured run](docs/HI3D_VALIDATION.md).
 - Setup downloads the refiner, DINOv2 and CLIP explicitly. It reserves no GPU, but
   CPU builds, downloads, storage and later inference may incur Modal charges.
 
