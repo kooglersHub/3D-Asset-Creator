@@ -233,6 +233,7 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
         "review_required": "motion" if stage == "motion-test" else "model",
         "hashes": {path.name: sha256(path) for path in folder.glob("*.glb")},
         "source": str(args.input) if args.input else None,
+        "reference_hashes": options["reviews"].get("reference", {}).get("hashes", {}),
         "views": "provided"
         if args.back_input
         else "generated"
