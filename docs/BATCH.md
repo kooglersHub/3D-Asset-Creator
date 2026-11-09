@@ -5,12 +5,14 @@ TRELLIS.2 model → optional Hi3D geometry refinement → Blender UV/PBR/normal 
 and triangle reduction → SkinTokens rig + one motion test → animation set → Godot
 GLB/scene with a separate sword attached to a hand bone.
 
-**Validation boundary:** offline queue tests and real Blender/Godot fixture tests
-pass locally. The new Qwen/FLUX/BiRefNet and pinned TRELLIS.2 deployments have not
-been built or run on Modal in this change. The previous standalone Hi3D 512 run
-passed, but did not show a clear quality improvement. New cloud builds/inference
-need their own approved compute budget. This is not a demonstrated end-to-end
-production run of the new knight.
+**Validation boundary (2026-11-10):** one real knight completed Qwen/BiRefNet
+references, TRELLIS.2 body and sword, UV-preserving finish, SkinTokens rigging,
+six local Kimodo-preset retargets and a Godot runtime test. An uploaded-model
+export failure was repaired; its cloud resume remains untested because further
+Modal execution was rejected by automatic approval review. The existing rig was
+recovered and animation completed entirely on local CPU. FLUX is an untested
+alternative. Hi3D remains optional after its previous 512 comparison did not show
+a clear improvement. See [the actual evidence and limits](KNIGHT_VALIDATION.md).
 
 ## Set up explicitly (charged cloud infrastructure)
 
@@ -80,6 +82,11 @@ python tools/batch.py approve --manifest batch.json --job DarkKnight --stage ref
 python tools/batch.py run --manifest batch.json --execute-cloud --max-cloud-tasks 2
 ```
 
+If an output fails visual inspection, use `reject --job ID --stage STAGE --note "reason"`.
+This preserves its artifacts, invalidates dependent stages, and requires an explicit
+`run --retry-failed` before more work. Completed reference images and TRELLIS
+exports are also cached remotely so a later stage failure does not repeat them.
+
 Then approve `finish`, run the single `motion-test`, approve that, run `animate`,
 approve all clips, and run again for local packaging. `--job` can be repeated to
 review a selected set or limit production. Each review is bound to SHA-256 of
@@ -97,9 +104,11 @@ images must remain unchanged after approval; keep review notes in the database.
 ## Finish and Godot integration
 
 Blender runs locally on CPU. `--blender` accepts any Blender 4.2+ executable.
-The finish tool decimates and creates UVs; it is not animation-aware quad
-retopology. It bakes base color, roughness and metallic from the coarse PBR
-surface, then high-to-low tangent normals. Hi3D's geometry-only mesh is aligned
+The finish tool decimates while preserving TRELLIS UVs and PBR materials by
+default; it is not animation-aware quad retopology. Re-baking an unchanged
+layered armor mesh can produce projection artifacts and is deliberately avoided.
+When Hi3D changes the geometry, the finish path creates UVs and bakes source base
+color, roughness, metallic and high-to-low tangent normals. Hi3D's mesh is aligned
 back into coarse-mesh space before projection. Large topology changes can still
 produce bad texture projections and must be rejected during review.
 
@@ -108,7 +117,9 @@ visual adapter, provenance and optional `weapon.glb`. Copy `Assets` into the
 Godot project root and instance the scene. Existing gameplay controllers should
 call `set_speed`, `attack`, `hit`, `die` on the visual adapter. It handles clip
 playback and one-shot return to locomotion, not combat damage or hitboxes.
-The weapon stays separate and follows `BoneAttachment3D` rigidly.
+The weapon stays separate and follows `BoneAttachment3D` rigidly. Packaging removes
+horizontal root travel from `walk` and `run` while retaining vertical bob; original
+individual clips retain their root motion. Set `in_place_clips: []` to opt out.
 
 Automatic semantic hand names and numbered SkinTokens bones are supported.
 The worker reuses AssetFurnace's humanoid topology/geometry mapper and exports
@@ -132,7 +143,38 @@ godot --headless --path exports/godot-smoke --script res://test.gd
 ```
 
 The fixture verifies actual PBR pixel output, geometry reduction, meter scale,
-two clips with the same rest skeleton, Godot import, rigid hand-following sword,
+three clips with the same rest skeleton, in-place walking with vertical bob,
+Godot import, rigid hand-following sword,
 and return to idle after attacking. CI repeats this on Blender 4.2 and Godot 4.6.1.
 Locally validated on Blender 5.2.3 and Godot 4.6.1; MCP server/addon 4.1.11 were
 connected on localhost and their versions matched for the isolated fixture.
+
+## Recover an existing rig locally
+
+If a paid rig computation succeeded but a later export failed, recover the GLB
+and its sibling `rigged.provenance.json`. The provenance must bind the rig to the
+exact reviewed finished model. Obtain AssetFurnace's pinned `v0.5.7` source,
+including its motion NPZ files (commit `15b1776ecd847012c8af6f32344cb763a674aa2c`).
+Keep the upstream license and preset provenance with those files.
+
+```powershell
+python tools/batch.py run --manifest batch.json --job DarkKnight --local-rig recovered/rigged.glb --motion-repo ../image-to-3dlab --max-cloud-tasks 0 --retry-failed
+```
+
+Only motion stages use this CPU path. It never falls back to Modal on failure.
+The rig, retargeter, preset metadata and preset bytes are checksum-bound to the
+motion review. Approval gates still apply between the single test and the full set.
+These are pre-generated Kimodo motions retargeted with Blender, not newly inferred
+text-to-motion clips or fingers automatically closed around the sword.
+
+Create an isolated, interactive Godot preview without modifying your game:
+
+```powershell
+python tools/create_preview_project.py --package PATH_TO_PACKAGE --character DarkKnight --output exports/knight-preview
+godot --path exports/knight-preview --editor --import
+godot --path exports/knight-preview
+```
+
+Keys: 1 idle, 2 walk, 3 run, Space attack, H hit, D death, R reset. To verify a real
+package, copy `tests/godot_generated_asset_smoke.gd` into that project as `test.gd`
+and run `godot --headless --path exports/knight-preview --script res://test.gd`.

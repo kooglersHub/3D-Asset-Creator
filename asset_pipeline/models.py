@@ -32,7 +32,7 @@ MODELS = {
         "role": "optional geometry-only refinement",
     },
 }
-DIFFUSERS_REVISION = "84532a058702c74ae5d1dd6ceb05683fc5d5e768"
+DIFFUSERS_VERSION = "0.37.0"
 TRELLIS_REVISION = "75fbf0183001ed9876c8dbb35de6b68552ee08bd"
 
 FRONT_PROMPT = (

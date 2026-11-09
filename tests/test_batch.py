@@ -143,6 +143,19 @@ class BatchTests(unittest.TestCase):
         self.assertNotEqual(original["files"], replacement["files"])
         self.assertTrue(Path(original["files"]["artifact"]).exists())
 
+    def test_review_rejection_invalidates_dependents_and_preserves_other_jobs(self):
+        self.run_cloud()
+        for job in self.jobs:
+            self.store.approve(job, "reference", "reviewed")
+        self.run_cloud()
+        original = json.loads(self.store.task(self.jobs[0], "reference")["result"])
+        self.store.reject(self.jobs[0], "reference", "Weapon style needs correction")
+        for stage in ["reference", "model", "refine", "finish"]:
+            self.assertEqual(self.store.task(self.jobs[0], stage)["status"], "failed")
+            self.assertEqual(self.store.task(self.jobs[1], stage)["status"], "complete")
+        self.assertFalse(self.store.reviewed(self.jobs[0], "reference"))
+        self.assertTrue(Path(original["files"]["artifact"]).is_file())
+
     def test_manifest_rejects_windows_collisions_and_bad_resolution(self):
         manifest = self.root / "batch.json"
         for jobs in [

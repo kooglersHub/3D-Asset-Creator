@@ -2,6 +2,13 @@
 
 These are selected candidates, not a measured universal ranking. Quality for
 this exact armored knight needs a same-input comparison and human review.
+
+Rechecked 2026-11-09: [Qwen Image 2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
+is newer and supports native RGBA, but its
+[Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)
+limits use to non-commercial research/evaluation unless separately licensed.
+It is therefore not selected for this commercially usable game-asset workflow.
+The Apache-2.0 Image Edit 2511 path remains the reference-editing choice.
 The existing Hi3D result is documented in [HI3D_VALIDATION.md](HI3D_VALIDATION.md).
 
 | Task | Choice | Why and limit |
@@ -17,7 +24,7 @@ The existing Hi3D result is documented in [HI3D_VALIDATION.md](HI3D_VALIDATION.m
 | Excluded default | [Hunyuan3D-2mini license](https://huggingface.co/tencent/Hunyuan3D-2mini/blob/main/LICENSE) | Tencent Community terms contain territorial restrictions including the EU. Not silently selected for this German user. |
 
 Exact image-model and TRELLIS weight revisions are in
-`asset_pipeline/models.py`; diffusers and TRELLIS source commits are pinned.
+`asset_pipeline/models.py`; the diffusers package version and TRELLIS source commit are pinned.
 The official BiRefNet custom model code is downloaded at a pinned revision and
 loaded locally with `trust_remote_code`. Hi3D and AssetFurnace have their own
 existing pinned revisions. TRELLIS's DINO encoder mirror is checksum-verified;

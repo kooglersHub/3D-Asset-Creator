@@ -4,8 +4,11 @@ New: [resumable batch production](docs/BATCH.md) with Qwen/FLUX reference editin
 BiRefNet masking, TRELLIS.2 PBR models, optional Hi3D, local Blender baking,
 rig/motion review gates and Godot packages with separate weapons.
 [Model comparison and sources](docs/MODEL_SELECTION.md).
-The new cloud adapters still require a GPU validation run; local export/runtime
-tests use synthetic fixtures. The commands below remain the standalone legacy path.
+The first real knight has completed reference editing, TRELLIS.2 generation,
+SkinTokens rigging, six locally retargeted motions and a Godot runtime test.
+[Validation results and remaining limits](docs/KNIGHT_VALIDATION.md).
+The commands below remain the standalone legacy path; use the batch guide for
+the new workflow.
 
 Image or GLB → reviewed static character → one motion test → animation set.
 Runs AssetFurnace 0.5.7, Pixal3D, Blender and SkinTokens on Modal.

@@ -124,6 +124,46 @@ def record_hash(record: dict, field: str) -> str:
     return sha256(path)
 
 
+def surface_reference(record: dict) -> str:
+    for field in ("finished", "model"):
+        if record.get(field):
+            return record[field]
+    # Uploaded GLBs are not indexed as generated models. Their exact source is
+    # kept beside the rig and bound to it through the input provenance hash.
+    root = (ASSETFURNACE / "output").resolve()
+    rig = (root / record["rigged"]).resolve()
+    if not rig.is_relative_to(root):
+        raise ValueError("Rig file escapes the output directory")
+    source = (rig.parent / "input/source.glb").resolve()
+    if not source.is_relative_to(root):
+        raise ValueError("Rig source escapes the output directory")
+    provenance = json.loads(rig.with_suffix(".provenance.json").read_text(encoding="utf-8"))
+    if provenance.get("input", {}).get("sha256") != sha256(source):
+        raise ValueError("Rig source no longer matches its provenance")
+    return source.relative_to(root).as_posix()
+
+
+def reusable_rig(studio, source_hash: str) -> str | None:
+    root = (ASSETFURNACE / "output").resolve()
+    records = studio.get("api/assets").get("assets", [])
+    for record in sorted(records, key=lambda value: value.get("updated", 0), reverse=True):
+        if not record.get("rigged"):
+            continue
+        rig = (root / record["rigged"]).resolve()
+        if not rig.is_relative_to(root):
+            raise ValueError("Rig file escapes the output directory")
+        sidecar = rig.with_suffix(".provenance.json")
+        if not sidecar.is_file():
+            continue
+        provenance = json.loads(sidecar.read_text(encoding="utf-8"))
+        if provenance.get("input", {}).get("sha256") == source_hash:
+            surface = surface_reference(record)
+            if record_hash({"surface": surface}, "surface") != source_hash:
+                raise ValueError("Cached rig differs from the reviewed surface")
+            return record["id"]
+    return None
+
+
 def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
     stage = options["stage"]
     advanced = {"arms_away": options["arms_away"], "texture_size": options["texture_size"]}
@@ -188,22 +228,30 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
             review = options["reviews"].get("model", {})
             check_review(review, "model", {"model": sha256(args.input)})
             advanced["rig_from"] = "model"
-            job = api.create(
-                studio,
-                want="character",
-                description=args.character,
-                model_path=str(args.input.resolve()),
-                finish_upload=False,
-                stop_after_step="rigged",
-                advanced=advanced,
+            identifier = (
+                reusable_rig(studio, sha256(args.input)) if options.get("reuse_rig") else None
             )
-            identifier = completed_id(studio, job, api)
+            if identifier:
+                print(
+                    f"[AssetFurnace] Resuming existing reviewed-source rig {identifier}", flush=True
+                )
+            else:
+                job = api.create(
+                    studio,
+                    want="character",
+                    description=args.character,
+                    model_path=str(args.input.resolve()),
+                    finish_upload=False,
+                    stop_after_step="rigged",
+                    advanced=advanced,
+                )
+                identifier = completed_id(studio, job, api)
             options["reviews"]["model"] = {**review, "asset_id": identifier}
         record = asset_by_id(studio, identifier)
-        surface_field = "finished" if record.get("finished") else "model"
-        if surface_field == "model":
+        surface = surface_reference(record)
+        if not record.get("finished"):
             advanced["rig_from"] = "model"
-        hashes = {"model": record_hash(record, surface_field)}
+        hashes = {"model": record_hash({"surface": surface}, "surface")}
         check_review(options["reviews"].get("model", {}), "model", hashes, identifier)
         if stage == "animate":
             motion_review = options["reviews"].get("motion", {})
@@ -237,9 +285,9 @@ def run_pipeline(studio, api, args, options: dict, folder: Path) -> dict:
             )
             identifier = completed_id(studio, job, api)
         record = asset_by_id(studio, identifier)
-        if record_hash(record, surface_field) != hashes["model"]:
+        if record_hash({"surface": surface_reference(record)}, "surface") != hashes["model"]:
             raise ValueError("Animation changed the reviewed model unexpectedly")
-        save_glb(record[surface_field], folder / "model.glb")
+        save_glb(surface_reference(record), folder / "model.glb")
         save_glb(record["rigged"], folder / "rigged.glb")
         from rig_semantics import map_glb
 

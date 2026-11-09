@@ -12,6 +12,17 @@ func check_package() -> void:
 	assert(visual.player != null)
 	assert(visual.player.has_animation("idle"))
 	assert(visual.player.has_animation("sword_swing"))
+	var walk = visual.player.get_animation("walk")
+	var vertical_values: Array[float] = []
+	for track in range(walk.get_track_count()):
+		if walk.track_get_type(track) == Animation.TYPE_POSITION_3D and String(walk.track_get_path(track)).ends_with(":bone_7"):
+			var anchor: Vector3 = walk.track_get_key_value(track, 0)
+			for key in range(walk.track_get_key_count(track)):
+				var value: Vector3 = walk.track_get_key_value(track, key)
+				assert(Vector2(value.x-anchor.x, value.z-anchor.z).length() < 0.001)
+				vertical_values.append(value.y)
+	assert(vertical_values.size() > 2)
+	assert(vertical_values.max() - vertical_values.min() > 0.01)
 	assert(visual.player.current_animation == "idle")
 	var attachment = visual.find_children("*", "BoneAttachment3D", true, false)[0]
 	assert(attachment.bone_name == "bone_7")
