@@ -337,6 +337,9 @@ class Runner:
                         cloud = stage in CLOUD_STAGES and not (
                             stage == "refine" and not job.config["refine"]
                         )
+                        cloud = cloud and getattr(self.provider, "requires_cloud", lambda *_: True)(
+                            stage, job
+                        )
                         if cloud and (not execute_cloud or used >= max_cloud_tasks):
                             summary.append((job.identifier, stage, "cloud-budget-stop"))
                             continue

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import bpy
+from mathutils import Vector
 
 
 def imported_rig(path):
@@ -44,12 +45,42 @@ def compatible_skeletons(left, right):
     )
 
 
-def assemble(rig_path, clips, output, hand_bone=""):
+def make_in_place(rig, action):
+    roots = [bone for bone in rig.pose.bones if bone.parent is None]
+    if len(roots) != 1:
+        raise ValueError("In-place locomotion needs one skeleton root")
+    root = roots[0]
+    data = rig.animation_data
+    muted = [(track, track.mute) for track in data.nla_tracks]
+    for track, _ in muted:
+        track.mute = True
+    data.action = action
+    if hasattr(data, "action_slot") and len(action.slots):
+        data.action_slot = action.slots[0]
+    inverse_basis = (rig.matrix_world @ root.bone.matrix_local).to_3x3().inverted()
+    first, last = map(int, action.frame_range)
+    samples = []
+    for frame in range(first, last + 1):
+        bpy.context.scene.frame_set(frame)
+        samples.append((frame, root.location.copy(), rig.matrix_world @ root.matrix.translation))
+    anchor = samples[0][2]
+    for frame, position, world in samples:
+        root.location = position + inverse_basis @ Vector(
+            (anchor.x - world.x, anchor.y - world.y, 0)
+        )
+        root.keyframe_insert("location", frame=frame)
+    for track, mute in muted:
+        track.mute = mute
+    return list(samples[-1][2] - anchor)
+
+
+def assemble(rig_path, clips, output, hand_bone="", in_place_clips=("walk", "run")):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     base, base_objects = imported_rig(rig_path)
     signature = skeleton_signature(base)
     base.animation_data_clear()
     base.animation_data_create()
+    removed_motion = {}
     for name, path in clips.items():
         other, objects = imported_rig(path)
         if not compatible_skeletons(skeleton_signature(other), signature):
@@ -66,6 +97,8 @@ def assemble(rig_path, clips, output, hand_bone=""):
         if len(actions) != 1:
             raise ValueError(f"Clip {name} needs exactly one action, got {len(actions)}")
         action = actions[0]
+        if name in in_place_clips:
+            removed_motion[name] = make_in_place(other, action)
         action.name = name
         action.use_fake_user = True
         track = base.animation_data.nla_tracks.new()
@@ -99,7 +132,13 @@ def assemble(rig_path, clips, output, hand_bone=""):
         export_animations=True,
         export_animation_mode="NLA_TRACKS",
     )
-    metadata = {"bones": bones, "hand_bone": hand_bone, "clips": list(clips)}
+    metadata = {
+        "bones": bones,
+        "hand_bone": hand_bone,
+        "clips": list(clips),
+        "in_place_clips": list(removed_motion),
+        "original_root_delta_world": removed_motion,
+    }
     output.with_suffix(".json").write_text(json.dumps(metadata, indent=2))
     return metadata
 
@@ -109,7 +148,13 @@ def main():
     parser.add_argument("--spec", type=Path, required=True)
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :])
     spec = json.loads(args.spec.read_text())
-    assemble(Path(spec["rig"]), spec["clips"], Path(spec["output"]), spec.get("hand_bone", ""))
+    assemble(
+        Path(spec["rig"]),
+        spec["clips"],
+        Path(spec["output"]),
+        spec.get("hand_bone", ""),
+        spec.get("in_place_clips", ["walk", "run"]),
+    )
 
 
 if __name__ == "__main__":

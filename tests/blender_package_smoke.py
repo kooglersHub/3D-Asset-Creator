@@ -34,7 +34,7 @@ def smoke():
     modifier.object = rig
     mesh.vertex_groups.new(name="bone_7").add(list(range(8)), 1.0, "REPLACE")
     bpy.ops.export_scene.gltf(filepath=str(source / "rigged.glb"), export_format="GLB")
-    for name, axis in [("idle", "z"), ("sword_swing", "x")]:
+    for name, axis in [("idle", "z"), ("sword_swing", "x"), ("walk", "x")]:
         # Independent source files must not inherit another clip's Blender actions.
         bpy.ops.wm.read_factory_settings(use_empty=True)
         bpy.ops.import_scene.gltf(filepath=str(source / "rigged.glb"))
@@ -45,6 +45,10 @@ def smoke():
         pose.keyframe_insert("rotation_euler", frame=1)
         setattr(pose.rotation_euler, axis, math.pi / 2)
         pose.keyframe_insert("rotation_euler", frame=10)
+        if name == "walk":
+            for frame, location in [(1, (0, 0, 0)), (5, (0.4, 0.1, 0)), (10, (0.8, 0, 0))]:
+                pose.location = location
+                pose.keyframe_insert("location", frame=frame)
         rig.animation_data.action.name = name
         bpy.ops.export_scene.gltf(
             filepath=str(source / f"{name}.glb"),
@@ -60,13 +64,13 @@ def smoke():
         source / "weapon.glb",
         {
             "kind": "humanoid",
-            "moves": ["idle", "sword_swing"],
+            "moves": ["idle", "sword_swing", "walk"],
             "weapon": {"hand_bone": "auto", "position": [0, 0, 0.5]},
         },
     )
     files = {
         f"export/{name}.glb": str(source / f"{name}.glb")
-        for name in ["rigged", "idle", "sword_swing"]
+        for name in ["rigged", "idle", "sword_swing", "walk"]
     }
     mapper = source / "fixture_mapper.py"
     mapper.write_text(
@@ -92,7 +96,7 @@ def smoke():
     length = struct.unpack_from("<I", data, 12)[0]
     document = json.loads(data[20 : 20 + length])
     names = {animation["name"] for animation in document["animations"]}
-    assert names == {"idle", "sword_swing"}, names
+    assert names == {"idle", "sword_swing", "walk"}, names
     (output / "project.godot").write_text(
         '[application]\nconfig/name="Generated asset smoke"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n'
     )

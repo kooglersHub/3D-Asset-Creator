@@ -118,6 +118,9 @@ def render_file(source, destination, frames, size, samples, material_mode="textu
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--export", type=Path, required=True)
+    parser.add_argument(
+        "--output-dir", type=Path, help="Separate review images from immutable stage artifacts"
+    )
     parser.add_argument("--clips", action="store_true")
     parser.add_argument("--frames", type=int, default=4)
     parser.add_argument("--size", type=int, default=512)
@@ -134,8 +137,8 @@ def main():
     names.update(variant["file"] for variant in manifest.get("variants", {}).values())
     if args.clips:
         names.update(f"{move}.glb" for move in manifest["moves"])
-    destination = directory / "previews"
-    destination.mkdir(exist_ok=True)
+    destination = args.output_dir.resolve() if args.output_dir else directory / "previews"
+    destination.mkdir(parents=True, exist_ok=True)
     rows = []
     for name in sorted(names):
         source = (directory / name).resolve()

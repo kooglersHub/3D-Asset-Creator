@@ -1,4 +1,5 @@
 import sys
+import json
 import tempfile
 import unittest
 import zipfile
@@ -122,6 +123,52 @@ class PipelineStageTests(unittest.TestCase):
 
     def records(self, _path):
         return {"assets": [self.record, {"id": "variant", "finished": "game.glb"}]}
+
+    def uploaded_rig(self):
+        self.record.pop("model")
+        self.record.pop("finished")
+        source = self.output / "input/source.glb"
+        source.parent.mkdir()
+        source.write_bytes((self.output / "raw.glb").read_bytes())
+        (self.output / "rigged.provenance.json").write_text(
+            json.dumps({"input": {"sha256": sha256(source)}})
+        )
+        return source
+
+    def test_uploaded_rig_resumes_from_provenance_without_repeating_rigging(self):
+        source = self.uploaded_rig()
+        self.args.input = self.output / "raw.glb"
+        self.args.asset_id = None
+        reviews = {"model": accepted("model", {"model": sha256(source)})}
+        self.record["clips"] = [{"name": "idle", "file": "idle.glb"}]
+        meta = worker.run_pipeline(
+            self.studio,
+            self.api,
+            self.args,
+            options("motion-test", reviews=reviews, reuse_rig=True),
+            self.folder,
+        )
+        self.assertEqual(meta["asset_id"], "selected")
+        self.assertEqual(sha256(self.folder / "model.glb"), sha256(source))
+        self.api.create.assert_not_called()
+        self.api.continue_asset.assert_not_called()
+
+    def test_changed_uploaded_rig_source_stops_before_any_new_generation(self):
+        source = self.uploaded_rig()
+        self.args.input = self.output / "raw.glb"
+        self.args.asset_id = None
+        reviews = {"model": accepted("model", {"model": sha256(source)})}
+        source.write_bytes(b"glTFchanged")
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            worker.run_pipeline(
+                self.studio,
+                self.api,
+                self.args,
+                options("motion-test", reviews=reviews, reuse_rig=True),
+                self.folder,
+            )
+        self.api.create.assert_not_called()
+        self.api.continue_asset.assert_not_called()
 
     def test_static_model_never_rigs_or_lists_moves(self):
         self.args.input = self.root / "front.png"

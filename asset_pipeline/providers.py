@@ -18,11 +18,20 @@ TOOLS = ROOT / "tools"
 
 
 class Providers:
-    def __init__(self, blender: Path):
+    def __init__(
+        self, blender: Path, *, local_rig: Path | None = None, motion_repo: Path | None = None
+    ):
         self.blender = blender
         self.stack = None
         self.apps = {}
         self.log_directory = None
+        if bool(local_rig) != bool(motion_repo):
+            raise ValueError("Use --local-rig together with --motion-repo")
+        self.local_rig = local_rig.resolve() if local_rig else None
+        self.motion_repo = motion_repo.resolve() if motion_repo else None
+
+    def requires_cloud(self, stage, job):
+        return not (self.local_rig and stage in {"motion-test", "animate"})
 
     @contextlib.contextmanager
     def session(self, stage):
@@ -168,6 +177,8 @@ class Providers:
         return self._motion(job, inputs, folder, test=False)
 
     def _motion(self, job, inputs, folder, test):
+        if self.local_rig:
+            return self._local_motion(job, inputs, folder, test)
         module = self.cloud("modal_assetfurnace")
         from quality_workflow import MODEL_CHECKS, MOTION_CHECKS, extract_export
 
@@ -187,6 +198,7 @@ class Providers:
             "moves": ",".join(moves),
             "compare_details": [],
             "reviews": {"model": model_review},
+            "reuse_rig": True,
         }
         identifier = ""
         if not test:
@@ -224,6 +236,97 @@ class Providers:
         self.blender_run("preview_asset.py", "--export", folder / "export", "--clips")
         return json.loads((folder / "export/manifest.json").read_text())
 
+    def _local_motion(self, job, inputs, folder, test):
+        from .local_motion import motion_sources, validate_rig
+
+        model = Path(inputs["finish"]["files"]["model.glb"])
+        provenance = validate_rig(self.local_rig, model)
+        rig_hash = digest(self.local_rig)
+        sources = motion_sources(self.motion_repo)
+        tested = None
+        if not test:
+            tested = json.loads(
+                Path(inputs["motion-test"]["files"]["export/manifest.json"]).read_text()
+            )
+            if tested.get("rig_sha256") != rig_hash or tested.get("retarget_sources") != sources:
+                raise ValueError("Local rig or retargeter changed after the motion review")
+        moves = [job.config.get("test_move", "idle")] if test else job.config["moves"]
+        presets = {
+            preset["id"]: preset
+            for preset in json.loads(
+                (self.motion_repo / "image_to_3dlab/motions/presets.json").read_text()
+            )["presets"]
+        }
+        for move in moves:
+            if (
+                move not in presets
+                or not (self.motion_repo / "image_to_3dlab/motions" / (move + ".npz")).is_file()
+            ):
+                raise ValueError(f"Missing local Kimodo preset: {move}")
+        export = folder / "export"
+        export.mkdir()
+        shutil.copy2(model, export / "model.glb")
+        shutil.copy2(self.local_rig, export / "rigged.glb")
+        atomic_json(export / "rigged.provenance.json", provenance)
+        for move in moves:
+            if tested and move in tested["moves"]:
+                shutil.copy2(
+                    inputs["motion-test"]["files"][f"export/{move}.glb"], export / f"{move}.glb"
+                )
+            else:
+                self.blender_run(
+                    "local_motion_blender.py",
+                    "--retarget",
+                    self.motion_repo / "scripts/kimodo_retarget.py",
+                    "--rig",
+                    self.local_rig,
+                    "--motion",
+                    self.motion_repo / f"image_to_3dlab/motions/{move}.npz",
+                    "--out",
+                    export / f"{move}.glb",
+                    "--arm-spread",
+                    8,
+                )
+            atomic_json(
+                export / f"{move}.provenance.json",
+                {
+                    "rig_sha256": rig_hash,
+                    "source_sha256": digest(model),
+                    "preset": presets[move],
+                    "preset_sha256": digest(
+                        self.motion_repo / f"image_to_3dlab/motions/{move}.npz"
+                    ),
+                    "motion_model": "nvidia/Kimodo-SOMA-RP-v1.1",
+                    "license": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
+                    "runtime": "local Blender CPU; pre-generated Kimodo preset",
+                },
+            )
+        # Use Blender's bundled numpy rather than install ML packages on the PC.
+        self.blender_run(
+            "local_rig_map.py",
+            "--rig",
+            export / "rigged.glb",
+            "--mapper",
+            self.motion_repo / "scripts/kimodo_retarget.py",
+            "--output",
+            export / "skeleton-map.json",
+        )
+        manifest = {
+            "name": job.identifier,
+            "asset_id": "local-" + rig_hash[:12],
+            "stage": "motion-test" if test else "animate",
+            "moves": moves,
+            "variants": {},
+            "runtime": "local_blender",
+            "rig_sha256": rig_hash,
+            "retarget_sources": sources,
+            "hashes": {path.name: digest(path) for path in export.glob("*.glb")},
+        }
+        atomic_json(export / "manifest.json", manifest)
+        self.blender_run("check_blender_imports.py", export)
+        self.blender_run("preview_asset.py", "--export", export, "--clips")
+        return manifest
+
     def package(self, job, inputs, folder):
         destination = folder / "Assets/Generated" / job.identifier
         destination.mkdir(parents=True, exist_ok=True)
@@ -248,6 +351,7 @@ class Providers:
                 "clips": {move: files[f"export/{move}.glb"] for move in job.config["moves"]},
                 "output": str(destination / "model.glb"),
                 "hand_bone": hand,
+                "in_place_clips": job.config.get("in_place_clips", ["walk", "run"]),
             }
             atomic_json(folder / "assembly.json", spec)
             self.blender_run("assemble_character.py", "--spec", folder / "assembly.json")

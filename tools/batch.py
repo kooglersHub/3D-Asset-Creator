@@ -22,6 +22,12 @@ def main():
     )
     parser.add_argument("--execute-cloud", action="store_true")
     parser.add_argument(
+        "--local-rig", type=Path, help="Already-computed rig GLB with matching .provenance.json"
+    )
+    parser.add_argument(
+        "--motion-repo", type=Path, help="Pinned AssetFurnace checkout for local CPU animation"
+    )
+    parser.add_argument(
         "--max-cloud-tasks",
         type=int,
         default=1,
@@ -104,7 +110,10 @@ def main():
         else:
             from asset_pipeline.providers import Providers
 
-            summary = Runner(store, Providers(args.blender)).run(
+            summary = Runner(
+                store,
+                Providers(args.blender, local_rig=args.local_rig, motion_repo=args.motion_repo),
+            ).run(
                 jobs,
                 execute_cloud=args.execute_cloud,
                 max_cloud_tasks=args.max_cloud_tasks,
